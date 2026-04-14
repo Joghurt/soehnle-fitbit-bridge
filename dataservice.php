@@ -5,24 +5,24 @@ require_once('config.php');
 /*
 HOW-TO: Set up Fitbit Integration
 
-1. Create Fitbit App
+1. Create a Fitbit App
    - Go to https://dev.fitbit.com/apps/new
    - Create a new app with the following settings:
-     - Application Name: e.g. "Device Data Service"
-     - Description: Any
-     - Application Website: Your domain, e.g. http://yourdomain.com
+     - Application Name: e.g., Soehnle Fitbit Bridge
+     - Description: Any description, doesn't matter since this will be no official app
+     - Application Website URL: Any
      - Organization: Any
-     - Organization Website: Any
-     - Terms of Service URL: Optional
-     - Privacy Policy URL: Optional
+     - Organization Website URL: Any
+     - Terms of Service URL: Any
+     - Privacy Policy URL: Any
      - OAuth 2.0 Application Type: Personal
-     - Redirect URI: https://bridge1.soehnle.de/devicedataservice/dataservice?action=callback
+     - Redirect URL: https://bridge1.soehnle.de/devicedataservice/dataservice?action=callback
      - Default Access Type: Read & Write
-   - After creation: Note the Client ID and Client Secret
+   - After creation, note the OAuth 2.0 Client ID and Client Secret.
 
 2. Set configuration in config.php
-   - Replace 'FITBIT_CLIENT_ID' with your Client ID
-   - Replace 'FITBIT_CLIENT_SECRET' with your Client Secret
+   - Edit config.php and replace FITBIT_CLIENT_ID with the OAuth 2.0 Client ID and
+   - FITBIT_CLIENT_SECRET with the Client Secret from the Fitbit app overview.
 
 3. Perform authorization
    - Call in browser: https://bridge1.soehnle.de/devicedataservice/dataservice?action=authorize
