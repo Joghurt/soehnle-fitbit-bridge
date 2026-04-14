@@ -48,6 +48,7 @@ Notes:
 
 define('FITBIT_REDIRECT_URI', 'https://bridge1.soehnle.de/devicedataservice/dataservice?action=callback');
 define('TOKEN_FILE', __DIR__ . '/token.txt');
+define('DUPLICATE_REQUEST_WINDOW', 30); // seconds within which repeated identical requests are ignored
 
 date_default_timezone_set('Europe/Berlin');
 setlocale(LC_TIME, "de_DE.UTF-8", "de_DE@euro", "de_DE", "deu_deu", "de", "ge");
@@ -127,6 +128,44 @@ function fitbit_log($log_msg)
     $log_file = __DIR__ . '/fitbit_log.txt';
     $timestamp = date('d.m.y H:i:s');
     file_put_contents($log_file, "[$timestamp] $log_msg\n", FILE_APPEND);
+}
+
+function is_duplicate_request($id_str, $weight)
+{
+    $history_file = __DIR__ . '/last_request.txt';
+    if (!file_exists($history_file)) {
+        return false;
+    }
+
+    $line = trim(file_get_contents($history_file));
+    if ($line === '') {
+        return false;
+    }
+
+    $parts = explode('|', $line);
+    if (count($parts) !== 3) {
+        return false;
+    }
+
+    list($prev_id, $prev_weight, $prev_timestamp) = $parts;
+    if ($prev_id !== $id_str) {
+        return false;
+    }
+    if (floatval($prev_weight) !== floatval($weight)) {
+        return false;
+    }
+    if ((time() - intval($prev_timestamp)) > DUPLICATE_REQUEST_WINDOW) {
+        return false;
+    }
+
+    return true;
+}
+
+function update_last_request($id_str, $weight)
+{
+    $history_file = __DIR__ . '/last_request.txt';
+    $entry = sprintf('%s|%s|%s', $id_str, $weight, time());
+    file_put_contents($history_file, $entry);
 }
 
 function load_token() {
@@ -249,8 +288,14 @@ $id_str = str_pad($id1, 8, '0', STR_PAD_LEFT) . "-" . str_pad($id2, 8, '0', STR_
 $weight = hexdec(substr($data_string, 38, 4))/100;
 
 if ($id1 && $id2 && $weight > 0) {
-    wh_log(date("d.m.y H:i:s") . " " . $weight);
-    send_to_fitbit($weight);
+    if (is_duplicate_request($id_str, $weight)) {
+        fitbit_log("Duplicate request skipped for scale $id_str with weight $weight kg");
+    } else {
+        wh_log(date("d.m.y H:i:s") . " " . $weight);
+        if (send_to_fitbit($weight)) {
+            update_last_request($id_str, $weight);
+        }
+    }
 }
 
 # just return what we've sniffed with tcpdump, and taken from https://github.com/biggaeh/bathroom_scales/blob/master/dataservice

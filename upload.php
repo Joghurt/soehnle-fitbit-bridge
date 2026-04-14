@@ -223,7 +223,8 @@ $log_dir = __DIR__ . '/log';
 $uploaded_count = 0;
 $duplicate_count = 0;
 $error_count = 0;
-
+$last_date = null;
+$last_weight = null;
 if (!is_dir($log_dir)) {
 	echo "ERROR: log directory not found\n";
 	exit;
@@ -252,6 +253,12 @@ foreach ($log_files as $log_file) {
 			$date = parse_log_date($date_str);
 			
 			if ($date && $weight > 0) {
+				if ($date === $last_date && $weight === $last_weight) {
+					echo "  ⊘ Skipping consecutive duplicate entry: $weight kg on $date\n";
+					continue;
+				}
+				$last_date = $date;
+				$last_weight = $weight;
 				$parsed_count++;
 				$history_key = "$date|$weight"; // Track by date and weight to avoid duplicates
 				
