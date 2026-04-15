@@ -1,4 +1,5 @@
 <?php
+
 date_default_timezone_set('Europe/Berlin');
 setlocale(LC_TIME, "de_DE.UTF-8", "de_DE@euro", "de_DE", "deu_deu", "de", "ge");
 
@@ -6,24 +7,24 @@ setlocale(LC_TIME, "de_DE.UTF-8", "de_DE@euro", "de_DE", "deu_deu", "de", "ge");
 function get_weight_data() {
     $log_dir = __DIR__ . '/log';
     $data = [];
-    
+
     if (!is_dir($log_dir)) {
         return [];
     }
-    
+
     $log_files = glob($log_dir . '/*.log');
-    
+
     foreach ($log_files as $log_file) {
         $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        
+
         foreach ($lines as $line) {
             $parts = preg_split('/\s+/', trim($line));
-            
+
             if (count($parts) >= 3) {
                 $date_str = $parts[0];
                 $time_str = $parts[1];
                 $weight_str = $parts[2];
-                
+
                 // Parse dd.mm.yy to yyyy-mm-dd
                 $date_parts = explode('.', $date_str);
                 if (count($date_parts) === 3) {
@@ -32,7 +33,7 @@ function get_weight_data() {
                     $year = '20' . $date_parts[2];
                     $date_key = sprintf('%04d-%02d-%02d', $year, $month, $day);
                     $weight = floatval($weight_str);
-                    
+
                     if ($weight > 0) {
                         // Keep only the latest entry per day
                         if (!isset($data[$date_key]) || $data[$date_key]['time'] < $time_str) {
@@ -46,7 +47,7 @@ function get_weight_data() {
             }
         }
     }
-    
+
     // Sort by date
     ksort($data);
     return $data;
@@ -76,19 +77,19 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
         .header {
             background: white;
             padding: 30px;
@@ -96,19 +97,19 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
-        
+
         .header h1 {
             color: #333;
             margin-bottom: 20px;
             font-size: 28px;
         }
-        
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
         }
-        
+
         .stat-box {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -116,7 +117,7 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             border-radius: 8px;
             text-align: center;
         }
-        
+
         .stat-box label {
             display: block;
             font-size: 12px;
@@ -125,18 +126,18 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        
+
         .stat-box .value {
             font-size: 32px;
             font-weight: bold;
         }
-        
+
         .stat-box .unit {
             font-size: 14px;
             opacity: 0.8;
             margin-left: 5px;
         }
-        
+
         .chart-container {
             position: relative;
             background: white;
@@ -146,7 +147,7 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             margin-bottom: 20px;
             height: 400px;
         }
-        
+
         .info {
             background: white;
             padding: 20px;
@@ -155,24 +156,24 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
             color: #666;
             font-size: 14px;
         }
-        
+
         .info strong {
             color: #333;
         }
-        
+
         @media (max-width: 768px) {
             .header {
                 padding: 20px;
             }
-            
+
             .header h1 {
                 font-size: 20px;
             }
-            
+
             .stat-box .value {
                 font-size: 24px;
             }
-            
+
             .chart-container {
                 height: 300px;
             }
@@ -182,7 +183,7 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Weight Tracking</h1>
+            <h1>Weight Tracking</h1>
             <div class="stats">
                 <div class="stat-box">
                     <label>Current Weight</label>
@@ -202,17 +203,17 @@ $avg_weight = !empty($weights) ? round(array_sum($weights) / count($weights), 2)
                 </div>
             </div>
         </div>
-        
+
         <?php if (!empty($dates)): ?>
         <div class="chart-container">
             <canvas id="weightChart"></canvas>
         </div>
-        
+
         <div class="info">
             <strong>Data:</strong> <?php echo count($dates); ?> measurement points
             | <strong>Time period:</strong> <?php echo date('d.m.Y', strtotime($dates[0])); ?> – <?php echo date('d.m.Y', strtotime(end($dates))); ?>
         </div>
-        
+
         <script>
             const ctx = document.getElementById('weightChart').getContext('2d');
             const chart = new Chart(ctx, {

@@ -1,26 +1,13 @@
 <?php
 
+if (!file_exists(__DIR__ . '/config.php')) {
+    echo "ERROR: config.php not found. Please copy config_example.php to config.php and set your Fitbit credentials.\n";
+    exit;
+}
+
 require_once('config.php');
+require_once(__DIR__ . '/fitbit_common.php');
 
-/*
-HOW-TO: upload.php - Batch Upload of Historical Weight Data to Fitbit
-
-This file reads all existing log files, parses date/time/weight
-and uploads the data to Fitbit. Duplicates are avoided.
-
-Usage:
-- Call in browser: http://bridge1.soehnle.de/devicedataservice/upload.php
-- Or via console: php /path/to/upload.php
-
-The script:
-1. Reads all log/*.log files
-2. Parses format: "dd.mm.yy hh:mm:ss weight"
-3. Tracks already uploaded entries in upload_history.txt
-4. Uploads new entries to Fitbit
-5. Avoids duplicates (same weights on the same date)
-*/
-
-define('TOKEN_FILE', __DIR__ . '/token.txt');
 define('HISTORY_FILE', __DIR__ . '/upload_history.txt');
 define('UPLOAD_DELAY', 1); // Seconds between successful uploads
 define('ERROR_DELAY', 3); // Seconds after error or rate limit
@@ -31,50 +18,6 @@ setlocale(LC_TIME, "de_DE.UTF-8", "de_DE@euro", "de_DE", "deu_deu", "de", "ge");
 header('Content-Type: text/plain; charset=utf-8');
 ob_start();
 
-function load_token() {
-	if (file_exists(TOKEN_FILE)) {
-		$data = json_decode(file_get_contents(TOKEN_FILE), true);
-		return $data;
-	}
-	return null;
-}
-
-function save_token($token_data) {
-	file_put_contents(TOKEN_FILE, json_encode($token_data));
-}
-
-function refresh_token($refresh_token) {
-	$url = 'https://api.fitbit.com/oauth2/token';
-	$data = [
-		'grant_type' => 'refresh_token',
-		'refresh_token' => $refresh_token,
-		'client_id' => FITBIT_CLIENT_ID,
-		'client_secret' => FITBIT_CLIENT_SECRET,
-	];
-
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_POST, true);
-	curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-
-	$response = curl_exec($ch);
-	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-	curl_close($ch);
-
-	if ($http_code == 200) {
-		$token_data = json_decode($response, true);
-		save_token($token_data);
-		echo "Token refreshed successfully\n";
-		sleep(1);
-		return $token_data['access_token'];
-	} else {
-		echo "Token refresh failed: " . $response . "\n";
-		sleep(ERROR_DELAY);
-		return null;
-	}
-}
 
 function send_to_fitbit($weight, $date, $time = null) {
 	$token_data = load_token();
@@ -107,7 +50,6 @@ function send_to_fitbit($weight, $date, $time = null) {
 
 		$response = curl_exec($ch);
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		curl_close($ch);
 
 		if ($http_code == 201) {
 			echo "✓ Uploaded: $weight kg on $date at " . ($time ?? date('H:i:s')) . "\n";
@@ -184,7 +126,7 @@ function parse_line($line) {
 	if (empty($line)) {
 		return null;
 	}
-	
+
 	// Check for new format: "dd.mm.yy hh:mm:ss weight"
 	if (preg_match('/^(\d{2}\.\d{2}\.\d{2}) (\d{2}:\d{2}:\d{2}) (\d+(?:\.\d+)?)$/', $line, $matches)) {
 		$date_str = $matches[1];
@@ -192,7 +134,7 @@ function parse_line($line) {
 		$weight = floatval($matches[3]);
 		return [$date_str, $time_str, $weight];
 	}
-	
+
 	// Check for old format: "RFC822 datetime ... weight: weight"
 	if (preg_match('/^(.+) (?:[0-9a-z-_]+) weight: (\d+(?:\.\d+)?)$/u', $line, $matches)) {
 		$datetime_str = trim($matches[1]);
@@ -208,7 +150,7 @@ function parse_line($line) {
 			return null; // Invalid datetime
 		}
 	}
-	
+
 	return null; // Unrecognized format
 }
 
@@ -244,14 +186,14 @@ foreach ($log_files as $log_file) {
 	echo "Reading: " . basename($log_file) . "\n";
 	$lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 	$parsed_count = 0;
-	
+
 	foreach ($lines as $line) {
 		$parsed = parse_line($line);
 		if ($parsed) {
 			list($date_str, $time_str, $weight) = $parsed;
-			
+
 			$date = parse_log_date($date_str);
-			
+
 			if ($date && $weight > 0) {
 				if ($date === $last_date && $weight === $last_weight) {
 					echo "  ⊘ Skipping consecutive duplicate entry: $weight kg on $date\n";
@@ -261,7 +203,7 @@ foreach ($log_files as $log_file) {
 				$last_weight = $weight;
 				$parsed_count++;
 				$history_key = "$date|$weight"; // Track by date and weight to avoid duplicates
-				
+
 				if (!isset($history[$history_key])) {
 					// Not yet uploaded
 					if (send_to_fitbit($weight, $date, $time_str)) {
@@ -293,5 +235,5 @@ echo "================================\n";
 if (!headers_sent()) {
 	header('Content-Length: ' . ob_get_length());
 }
+
 ob_end_flush();
-?>

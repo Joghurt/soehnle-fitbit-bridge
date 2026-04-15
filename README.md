@@ -40,7 +40,7 @@ This is a fork of the `https://github.com/haklein/soehnle-webconnect-dataservice
    - After creation, note the `OAuth 2.0 Client ID` and `Client Secret`.
 
 2. **Configure the Script**:
-   - Edit `config.php` and replace `FITBIT_CLIENT_ID` with the `OAuth 2.0 Client ID` and `FITBIT_CLIENT_SECRET` with the `Client Secret` from the Fitbit app overview.
+   - Rename `config_example.php` to `config.php` and replace `FITBIT_CLIENT_ID` with the `OAuth 2.0 Client ID` and `FITBIT_CLIENT_SECRET` with the `Client Secret` from the Fitbit app overview.
 
 3. **Authorize the App**:
    - Call in browser: `https://bridge1.soehnle.de/devicedataservice/dataservice?action=authorize`
@@ -76,13 +76,15 @@ The script resides in `$WEB_ROOT/devicedataservice/dataservice.php`.
 
 ### One way
 
-To handle extensionless PHP execution (mapping requests like `http://bridge1.soehnle.de/devicedataservice/dataservice?data=...` to `dataservice.php`), use the provided `.htaccess` file for Apache:
+To handle extensionless PHP execution (mapping requests like `https://bridge1.soehnle.de/devicedataservice/dataservice?data=...` to `dataservice.php`), use the provided `.htaccess` file for Apache config:
 
 ```
 RewriteEngine On
 RewriteCond %{SCRIPT_FILENAME} !-d
 RewriteRule ^([^.]+)$ $1.php [NC,L]
 ```
+
+or use the provided `.htaccess` file.
 
 For Nginx, add to your configuration:
 
@@ -95,19 +97,30 @@ location / {
 }
 ```
 
-### Another way
-
-Use the `.htaccess` file.
-
 ## Log Directory
 
 Create a `log` directory with proper permissions in the project directory for storing weight logs.
+
+## Testing the Integration
+
+Once you have completed the authorization steps, you can test the integration:
+
+- Send weight data from your scale: `?data=...` (e.g., from your scale)
+- The script parses the weight and automatically sends it to Fitbit
+- Weight data is logged to the `log/` directory (e.g., `log/240414.log`)
+- Fitbit upload results are logged to `fitbit_log.txt`
+
+## Token Management
+
+- Tokens are stored in `token.txt`
+- They are automatically renewed when they expire
+- Errors and token refresh activities are logged in `fitbit_log.txt`
 
 # Usage
 
 ## Receiving Data from Scale
 
-The scale sends data via GET requests to `dataservice.php`. The script:
+The scale sends data via GET requests to `https://bridge1.soehnle.de/devicedataservice/dataservice.php`. The script:
 
 - Parses the data string for the weight.
 - Logs the weight to a daily log file in the `log/` directory (format: `dd.mm.yy hh:mm:ss weight`).
@@ -122,14 +135,22 @@ Example log entry:
 
 To upload existing log data to Fitbit:
 
-- Run `upload.php` in your browser or via command line: `php upload.php`
-- The script reads all `log/*.log` files, parses the data, and uploads new entries to Fitbit.
-- Tracks uploaded entries in `upload_history.txt` to avoid duplicates.
-- Includes rate limiting and error handling.
+- **Browser**: Call `https://bridge1.soehnle.de/devicedataservice/upload.php`
+- **Command line**: `php /path/to/upload.php`
+
+The script performs the following steps:
+
+1. Reads all `log/*.log` files
+2. Parses the log format: `dd.mm.yy hh:mm:ss weight`
+3. Tracks already uploaded entries in `upload_history.txt` to avoid duplicates
+4. Uploads new entries to Fitbit with rate limiting (1 second between successful uploads)
+5. Implements error handling with longer delays (3 seconds) after errors or rate-limit responses
+
+The script will display upload progress and any errors encountered during the process.
 
 ## Viewing Data
 
-Access `show.php` in your browser to view:
+- **Browser**: Call `https://bridge1.soehnle.de/devicedataservice/show.php`
 
 - Current, minimum, maximum, and average weight.
 - Interactive chart of weight over time.
@@ -137,7 +158,7 @@ Access `show.php` in your browser to view:
 
 # Files Overview
 
-- `config.php`: Fitbit client configuration (Client ID and Secret).
+- `config_example.php`: Fitbit client example configuration (Client ID and Secret).
 - `dataservice.php`: Main script handling scale data reception and Fitbit upload.
 - `upload.php`: Batch uploader for historical data.
 - `show.php`: Web dashboard for viewing weight data.
@@ -152,4 +173,5 @@ Access `show.php` in your browser to view:
 - Ensure files like `token.txt`, `log/` directory, `fitbit_log.txt`, and `upload_history.txt` are writable by the web server.
 - Weight is sent to Fitbit in kg with dot as decimal separator.
 - Tokens are automatically refreshed when expired.
-- Check logs for any issues during operation.
+- Check logs in the `log/` directory and `fitbit_log.txt` for any issues during operation.
+- Repeated identical requests within 30 seconds are automatically ignored to prevent duplicate uploads.

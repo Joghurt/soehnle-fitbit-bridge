@@ -1,53 +1,14 @@
-<?php 
+<?php
+
+if (!file_exists(__DIR__ . '/config.php')) {
+    echo "ERROR: config.php not found. Please copy config_example.php to config.php and set your Fitbit credentials.\n";
+    exit;
+}
 
 require_once('config.php');
-
-/*
-HOW-TO: Set up Fitbit Integration
-
-1. Create a Fitbit App
-   - Go to https://dev.fitbit.com/apps/new
-   - Create a new app with the following settings:
-     - Application Name: e.g., Soehnle Fitbit Bridge
-     - Description: Any description, doesn't matter since this will be no official app
-     - Application Website URL: Any
-     - Organization: Any
-     - Organization Website URL: Any
-     - Terms of Service URL: Any
-     - Privacy Policy URL: Any
-     - OAuth 2.0 Application Type: Personal
-     - Redirect URL: https://bridge1.soehnle.de/devicedataservice/dataservice?action=callback
-     - Default Access Type: Read & Write
-   - After creation, note the OAuth 2.0 Client ID and Client Secret.
-
-2. Set configuration in config.php
-   - Edit config.php and replace FITBIT_CLIENT_ID with the OAuth 2.0 Client ID and
-   - FITBIT_CLIENT_SECRET with the Client Secret from the Fitbit app overview.
-
-3. Perform authorization
-   - Call in browser: https://bridge1.soehnle.de/devicedataservice/dataservice?action=authorize
-   - Log in to Fitbit and allow access
-   - You will be redirected, and the token will be saved in token.txt
-
-4. For testing: Send weight data
-   - Send as usual: ?data=... (e.g. from your scale)
-   - The script parses the weight and sends it automatically to Fitbit
-   - Weight data is logged to log/ directory (e.g., log/240414.log)
-   - Fitbit upload results are logged to fitbit_log.txt
-
-5. Token Management
-   - Tokens are stored in token.txt
-   - They are automatically renewed when expired
-   - Errors are logged in fitbit_log.txt
-
-Notes:
-- Ensure the files are writable (token.txt, log/ directory, fitbit_log.txt)
-- Weight is sent to Fitbit in kg, with dot as decimal separator
-- Check logs in log/ directory and fitbit_log.txt for issues
-*/
+require_once(__DIR__ . '/fitbit_common.php');
 
 define('FITBIT_REDIRECT_URI', 'https://bridge1.soehnle.de/devicedataservice/dataservice?action=callback');
-define('TOKEN_FILE', __DIR__ . '/token.txt');
 define('DUPLICATE_REQUEST_WINDOW', 30); // seconds within which repeated identical requests are ignored
 
 date_default_timezone_set('Europe/Berlin');
@@ -93,7 +54,6 @@ if ($action === 'authorize') {
 
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($http_code == 200) {
             $token_data = json_decode($response, true);
@@ -168,18 +128,6 @@ function update_last_request($id_str, $weight)
     file_put_contents($history_file, $entry);
 }
 
-function load_token() {
-    if (file_exists(TOKEN_FILE)) {
-        $data = json_decode(file_get_contents(TOKEN_FILE), true);
-        return $data;
-    }
-    return null;
-}
-
-function save_token($token_data) {
-    file_put_contents(TOKEN_FILE, json_encode($token_data));
-}
-
 function send_response_and_exit() {
     $body = ob_get_contents();
     if (!headers_sent()) {
@@ -187,37 +135,6 @@ function send_response_and_exit() {
     }
     ob_end_flush();
     exit;
-}
-
-function refresh_token($refresh_token) {
-    $url = 'https://api.fitbit.com/oauth2/token';
-    $data = [
-        'grant_type' => 'refresh_token',
-        'refresh_token' => $refresh_token,
-        'client_id' => FITBIT_CLIENT_ID,
-        'client_secret' => FITBIT_CLIENT_SECRET,
-    ];
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($http_code == 200) {
-        $token_data = json_decode($response, true);
-        save_token($token_data);
-        fitbit_log("Token refreshed successfully");
-        return $token_data['access_token'];
-    } else {
-        fitbit_log("Token refresh failed: " . $response);
-        return null;
-    }
 }
 
 function send_to_fitbit($weight) {
@@ -248,23 +165,23 @@ function send_to_fitbit($weight) {
 
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($http_code == 201) {
         fitbit_log("Weight uploaded to Fitbit: $weight kg on " . $data['date']);
         return true;
     } elseif ($http_code == 401) {
         // Try refresh
-        $new_token = refresh_token($token_data['refresh_token']);
-        if ($new_token) {
-            // Retry with new token
+        $access_token = refresh_token($token_data['refresh_token']);
+        if ($access_token) {
+            fitbit_log("Token refreshed successfully");
+
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $new_token,
+                'Authorization: Bearer ' . $access_token,
                 'Content-Type: application/json',
             ]);
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+
             if ($http_code == 201) {
                 fitbit_log("Weight uploaded to Fitbit after refresh: $weight kg on " . $data['date']);
                 return true;
@@ -301,7 +218,7 @@ if ($id1 && $id2 && $weight > 0) {
 # just return what we've sniffed with tcpdump, and taken from https://github.com/biggaeh/bathroom_scales/blob/master/dataservice
 switch($data_id) {
     case 0x24:
-        echo 'A00000000000000001000000000000000000000000000000bec650a1'; 
+        echo 'A00000000000000001000000000000000000000000000000bec650a1';
         break;
     case 0x22:
         echo 'A20000000000000000000000000000000000000000000000c9950d3f';
@@ -320,5 +237,5 @@ switch($data_id) {
 if (!headers_sent()) {
     header('Content-Length: ' . ob_get_length());
 }
+
 ob_end_flush();
-?>
